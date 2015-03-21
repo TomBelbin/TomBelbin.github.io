@@ -146,7 +146,7 @@ modfit</code></pre>
 ## C    0   21 2361   14    0 0.014607679
 ## D    1    2   25 2220    4 0.014209591
 ## E    0    1    2    6 2516 0.003564356</code></pre>
-<p>The resulting model <em>modfit</em> when computed using 5 fold cross-validation (repeated 3 times) was able to predict observations within the training set with an accuracy of greater than 99%. This was based on a model with 50 trees. The final mtry value used for the model was 27, which was the number of variables randomly sampled as candidates at each split. We can now apply this model to predict the class of observations in the testing set, and compute an out of sample error.</p>
+<p>The resulting model <em>modfit</em> when computed using 5 fold cross-validation (repeated 3 times) was able to predict observations within the training set with an accuracy of greater than 99%. The out-of-bag (OOB) estimate of error rate for this model was 0.91%. Out-of-bag estimate for the generalization error is the error rate of the out-of-bag classifier on the training set. The overall model was based on a model with 50 trees. The final mtry value used for the model was 27, which was the number of variables randomly sampled as candidates at each split. We can now apply this model to predict the class of observations in the testing set, and compute an out of sample error.</p>
 <pre class="r"><code>predictions&lt;-predict(modfit,newdata=testing)
 confusionMatrix(predictions,testing$classe)</code></pre>
 <pre><code>## Confusion Matrix and Statistics
