@@ -1,0 +1,92 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Tom Belbin"
+date: "Friday, March 20, 2015"
+output: html_document
+---
+
+###Background
+The goal of this course project was to build a model using practical machine learning approaches to predict how well a group of participants perform barbell lifts and the possible mistakes that can be predicted. The training dataset uses data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. Each participant was asked to perform barbell lifts correctly and incorrectly in 5 different ways. The 5 different barbell lift patterns consisted of a lift exactly according to the specification (Class A), a lift throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E). These data are included in the dataset in the _classe_ column as a factor variable with 5 levels. A more detailed explanation of the study can be found in the paper by Velluso and colleagues (Velluso et al., 2013) and from the "Weight Lifting Exercises Dataset" section of the following website: <http://groupware.les.inf.puc-rio.br/har>. The goal was therefore to predict which of the 5 classes (A through E) a participant's lift fell into based on data from the accelerometers.
+
+###Exploratory analysis and data cleaning
+
+Two datasets were made available for this project. The training data was downloaded from <https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv>. An accompanying test set for the submission portion of the project was downloaded from <https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>. Since the testing data was used only for the submission portion of the assignment, the training set was partitioned for model building and validation. The training.csv file was downloaded into the current R working directory, and then loaded into the R workspace.
+<br />
+```{r load data,cache=TRUE}
+# Load in data and assign anything with "NA", "" or "#DIV/0!" as missing data.
+dataset<-read.csv("pml-training.csv",na.strings=c("NA","","#DIV/0!"),header=TRUE)
+dim(dataset)
+```
+The dataset consisted of 19,622 observations recording 160 distinct variables. The first step in analysis of this data was a removal of variables that were either not relevant to the model building exercise, which essentially contained mostly missing data, or which had zero variance. From the initial 160 variables, the first 7 variable contained miscellaneous information on the name of the participant and the time of data recording which were removed. An additional 35 columns having near zero variance were also removed. And finally, the **APPLY** function in R was used to count the number of NAs in each of the remaining columns, and remove columns with 19,000 or more NA values. This reduced the dataset to 53 variables (including the classe variable), and no imputation was necessary as it was confirmed that no NAs remained. The code for these steps are shown below:
+```{r cleaning data,warning=FALSE,message=FALSE}
+# First 7 columns do not contribute anything to the model and should be removed.
+dataset<-dataset[,-c(1:7)]
+# Also removed columns that have near zero variance, which will also eliminate
+# columns with all NAs.
+library(caret)
+no_variance<-nearZeroVar(dataset)
+dataset<-dataset[,-no_variance]
+# Now down to 118 variables. Remove these from the dataset
+# Write a function to count the number of NAs in each column
+num_NAs<-function(column){count<-sum(is.na(column));return(count)}
+#Apply it across each column
+NA_columns_count<-apply(dataset,2,num_NAs)
+#Eliminate columns with a high number of NAs(>19,000)
+dataset<-dataset[,NA_columns_count<19,000]
+#Now down to 53 variables
+dim(dataset)
+```
+
+A quick overview of the dataset shown in **Figure 1** indicates that thousands of observations are contained in each category of the classe variable. Furthermore, there are approximately equal numbers of observations in each group, with the exception of class A (a lift according to the correct specifications) which has a slightly higher number of observations than the other groups.
+```{r plot data,warning=FALSE,message=FALSE}
+# Plot data to examine distribution across categories of the classe variable.
+library(ggplot2)
+qplot(classe,data=dataset, main="Figure 1. Breakdown of dataset observations by classe variable")
+```
+
+<br />
+
+###Model building using random forest with the _Caret_ package
+Measurement of accuracy in our model using only the training set (resubstitution accuracy) would be overly optimistic since these subjects were used in training. Due to the large number of observations (>19,000), cross validation and computation of _out of sample_ error could be calculated by dividing the dataset into training and test sets. Therefore, prior to building the model, the dataset was partitioned into training (70%) and test sets (30%) for this purpose. Due to the relatively low number of features included in the dataset, a feature reduction strategy such as principal component analysis was not deemed to be necessary. The separation into training and test sets and the fitting of a supervised model using a Random Forest approach with 5-fold cross validation (repeated 3 times) is shown below.
+```{r model building,warning=FALSE,message=FALSE}
+# Partition data into training and test sets
+set.seed(142)
+inTrain<-createDataPartition(y=dataset$classe,p=0.7,list=FALSE)
+training<-dataset[inTrain,]
+testing<-dataset[-inTrain,]
+dim(training);dim(testing)
+# Now run a random forest model and assess variable importance
+ctrl<-trainControl(method="repeatedcv",number=5,repeats=3)
+modfit<-train(classe~.,data=training,method="rf",ntree=50,proxy=TRUE,importance=TRUE,trControl=ctrl)
+# Output details of the model
+modfit
+modfit$finalModel
+```
+The resulting model _modfit_ when computed using 5 fold cross-validation (repeated 3 times) was able to predict observations within the training set with an accuracy of greater than 99%. This was based on a model with 50 trees. The final mtry value used for the model was 27, which was the number of variables randomly sampled as candidates at each split. We can now apply this model to predict the class of observations in the testing set, and compute an out of sample error.
+```{r out of sample accuracy}
+predictions<-predict(modfit,newdata=testing)
+confusionMatrix(predictions,testing$classe)
+```
+Overall, the model performed with an accuracy of 99.4% (95% confidence interval 99.2-99.6%) on the test set of 5885 observations, for an out of sample error rate of 0.6%. As an additional validation of the model, a testing of the model on the 20 additional samples that comprised the submission portion of the course project was successful in predicting all 20 observations, for a score of 20 out of 20.
+
+###Assessment of variable importance
+
+An assessment of the variable importance to the final random forest model is shown in **Figure 2**. Based on the mean decrease in accuracy of the model, and mean decrease in the Gini index, it would appear that the first 7 to 8 variables were most important to the model prediction. These variables included three variables related to the "belt measurements" (roll, pitch and yaw) and as well as y and z coordinates of the "magnet_dumbbell". The "pitch forearm" variable was also of high importance to model accuracy. 
+
+```{r variable importance plots}
+varImpPlot(modfit$finalModel,n.var=52,sort=TRUE,cex=0.6, main = "Figure 2. Variable importance of trained features")
+```
+<br />
+<br />
+
+###Conclusions
+In conclusion, using a Random Forest model with repeated 5-fold cross-validation, it was possible to build a model to predict which of the 5 classes (A through E) a participant's lift fell into based on data from the accelerometers with a greater than 99% accuracy. An assessment of the individual variable importance to the trained model indicated that the number of features used to train a model could have likely been further reduced from the 52 down to 7-8 features. Some of the most important features used in the model were the roll, pitch and yaw of the belt measurements, as well as measures related to the magnet dumbell and pitch forearm.
+
+Reference:
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI 
+(Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+
+```
+
+
